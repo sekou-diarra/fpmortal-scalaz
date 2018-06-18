@@ -8,10 +8,12 @@ import scalaz._
 import Scalaz._
 import ciapplication.algebra.{Drone, MachineNode, Machines}
 
+import scala.language.higherKinds
+
 final case class WorldView(
   backlog: Int,
   agents: Int,
-  managed: NonEmptyIList[MachineNode],
+  managed: NonEmptyList[MachineNode],
   alive: Map[MachineNode, Instant],
   pending: Map[MachineNode, Instant],
   time: Instant
@@ -54,21 +56,21 @@ final class DynAgents[F[_]](implicit M: Monad[F],
     }
   }
 
-  private object Stale{
+  private object Stale {
     def unapply(world: WorldView): Option[NonEmptyList[MachineNode]] =
       world match {
-        case WorldView(backlog,_,_,alive, pending, time) if alive.nonEmpty =>
-          (alive -- pending.keys).collect{
-            case(n, started)
+        case WorldView(backlog, _, _, alive, pending, time) if alive.nonEmpty =>
+          (alive -- pending.keys).collect {
+            case (n, started)
               if backlog == 0 && timediff(started, time).toMinutes % 60 >= 58 => n
-              case(n, started) if timediff(started, time) >= 5.hours => n
+            case (n, started) if timediff(started, time) >= 5.hours => n
           }.toList.toNel
         case _ => None
       }
   }
 
 
-  def act(world:WorldView) :F[WorldView] = world match {
+  def act(world: WorldView): F[WorldView] = world match {
     case NeedsAgent(node: MachineNode) =>
       for {
         _ <- m.start(node)
@@ -76,10 +78,10 @@ final class DynAgents[F[_]](implicit M: Monad[F],
       } yield update
 
     case Stale(nodes: NonEmptyList[MachineNode]) =>
-      nodes.foldLeftM(world){(world, n) =>
+      nodes.foldLeftM(world) { (world, n) =>
         for {
           _ <- m.stop(n)
-          update = world.copy(pending = world.pending +(n -> world.time))
+          update = world.copy(pending = world.pending + (n -> world.time))
         } yield update
       }
 
